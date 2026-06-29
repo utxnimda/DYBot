@@ -16,6 +16,8 @@
 
 根目录 [AGENTS.md](AGENTS.md) 是给 AI coding agent 的入口规则。
 
+换电脑或新工作区继续开发时，先看 [开发交接文档](docs/development-handoff.md)。
+
 ## 当前模块
 
 - `apps/desktop`：Electron 桌面壳，包含 main、preload、renderer 三层隔离。
