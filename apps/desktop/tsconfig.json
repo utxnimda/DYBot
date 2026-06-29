@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./electron/main" },
+    { "path": "./electron/preload" },
+    { "path": "./renderer" }
+  ]
+}

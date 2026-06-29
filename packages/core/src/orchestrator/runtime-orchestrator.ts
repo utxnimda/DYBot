@@ -1,0 +1,144 @@
+import { EventEmitter } from "node:events";
+import {
+  createBotError,
+  createTraceId,
+  type BotEvent,
+  type BotError,
+  type DouyuRoomCaptureConfig,
+  type HealthSnapshot,
+  type RuntimeStatus,
+} from "@dybot/contracts";
+import type { DouyuCaptureClient } from "@dybot/douyu";
+import { createLogger, type Logger } from "@dybot/logging";
+
+export interface RuntimeOrchestratorOptions {
+  logger?: Logger;
+  douyuCapture?: DouyuCaptureClient;
+}
+
+type RuntimeEventListener = (event: BotEvent) => void;
+
+export class RuntimeOrchestrator {
+  readonly #events = new EventEmitter();
+  readonly #logger: Logger;
+  readonly #douyuCapture: DouyuCaptureClient | null;
+  #douyuEventUnsubscribe: (() => void) | null = null;
+  #status: RuntimeStatus = "idle";
+  #startedAt: number | null = null;
+  #lastError: BotError | null = null;
+
+  constructor(options: RuntimeOrchestratorOptions = {}) {
+    this.#logger = options.logger ?? createLogger({ module: "runtime" });
+    this.#douyuCapture = options.douyuCapture ?? null;
+  }
+
+  onEvent(listener: RuntimeEventListener): () => void {
+    this.#events.on("event", listener);
+    return () => this.#events.off("event", listener);
+  }
+
+  getHealth(): HealthSnapshot {
+    return {
+      status: this.#status,
+      startedAt: this.#startedAt,
+      updatedAt: Date.now(),
+      activeProfileId: null,
+      lastError: this.#lastError,
+    };
+  }
+
+  start(): HealthSnapshot {
+    if (this.#status === "running" || this.#status === "starting") {
+      return this.getHealth();
+    }
+
+    this.#setStatus("starting");
+    this.#startedAt = Date.now();
+    this.#lastError = null;
+    this.#logger.info("runtime.start", "Runtime orchestrator started");
+    this.#setStatus("running");
+    return this.getHealth();
+  }
+
+  stop(): HealthSnapshot {
+    if (this.#status === "stopped" || this.#status === "idle" || this.#status === "stopping") {
+      return this.getHealth();
+    }
+
+    this.#setStatus("stopping");
+    if (this.#douyuCapture !== null) {
+      void this.#douyuCapture.stop().catch((error: unknown) => {
+        this.#logger.warn("runtime.douyu.stop_failed", "Failed to stop Douyu capture", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    this.#logger.info("runtime.stop", "Runtime orchestrator stopped");
+    this.#startedAt = null;
+    this.#setStatus("stopped");
+    return this.getHealth();
+  }
+
+  async startDouyuCapture(config: DouyuRoomCaptureConfig): Promise<HealthSnapshot> {
+    if (this.#douyuCapture === null) {
+      this.#lastError = createBotError({
+        code: "CONFIG_INVALID",
+        message: "Douyu capture client is not configured",
+        recoverable: true,
+      });
+      this.#logger.error("runtime.douyu.not_configured", this.#lastError.message);
+      return this.getHealth();
+    }
+
+    this.#ensureDouyuEventForwarding();
+    await this.#douyuCapture.start(config);
+    return this.getHealth();
+  }
+
+  async stopDouyuCapture(): Promise<HealthSnapshot> {
+    if (this.#douyuCapture === null) {
+      return this.getHealth();
+    }
+
+    await this.#douyuCapture.stop();
+    return this.getHealth();
+  }
+
+  fail(error: unknown): HealthSnapshot {
+    this.#lastError = createBotError({
+      code: "RUNTIME_ERROR",
+      message: error instanceof Error ? error.message : "Unknown runtime error",
+      recoverable: true,
+    });
+    this.#logger.error("runtime.error", this.#lastError.message);
+    this.#setStatus("error");
+    return this.getHealth();
+  }
+
+  #ensureDouyuEventForwarding(): void {
+    if (this.#douyuCapture === null || this.#douyuEventUnsubscribe !== null) {
+      return;
+    }
+
+    this.#douyuEventUnsubscribe = this.#douyuCapture.onEvent((event) => {
+      this.#events.emit("event", event);
+    });
+  }
+
+  #setStatus(status: RuntimeStatus): void {
+    this.#status = status;
+    const traceId = createTraceId();
+    const event: BotEvent = {
+      type: "runtime.status",
+      traceId,
+      payload: this.getHealth(),
+    };
+    this.#events.emit("event", event);
+  }
+}
+
+export function createRuntimeOrchestrator(
+  options?: RuntimeOrchestratorOptions,
+): RuntimeOrchestrator {
+  return new RuntimeOrchestrator(options);
+}

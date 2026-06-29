@@ -1,0 +1,45 @@
+{
+  "name": "dybot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Douyu desktop robot assistant.",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @dybot/desktop dev",
+    "build": "pnpm -r build",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint . --max-warnings=0",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "smoke": "tsx scripts/smoke.ts",
+    "pack": "pnpm --filter @dybot/desktop pack",
+    "release": "pnpm --filter @dybot/desktop release"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^2.2.0",
+    "@eslint/js": "^9.17.0",
+    "@dybot/core": "workspace:*",
+    "@dybot/douyu": "workspace:*"
+  }
+}

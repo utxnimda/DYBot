@@ -1,0 +1,50 @@
+﻿# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+out/
+release/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# Runtime data
+data/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Local config and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+token/
+secrets/
+
+# Electron / packaging
+*.blockmap
+*.snap
+*.AppImage
+*.dmg
+*.exe
+*.msi
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+

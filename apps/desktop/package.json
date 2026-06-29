@@ -1,0 +1,22 @@
+{
+  "name": "@dybot/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "dependencies": {
+    "@dybot/app-config": "workspace:*",
+    "@dybot/contracts": "workspace:*",
+    "@dybot/core": "workspace:*",
+    "@dybot/logging": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "vue-tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/main/tsconfig.json && tsc --noEmit -p electron/preload/tsconfig.json",
+    "test": "vitest run",
+    "pack": "electron-builder --dir --config ../../config/electron-builder/electron-builder.yml",
+    "release": "electron-builder --config ../../config/electron-builder/electron-builder.yml"
+  }
+}
