@@ -7,7 +7,7 @@
 - Remote: `https://github.com/utxnimda/DYBot.git`
 - Branch: `main`
 - 最近已知远端基线提交: `bd14059 docs: add development handoff`；本次提交推送后以 GitHub `main` 最新提交为准
-- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、`pnpm run pack` 打包验收。
+- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、AI contracts/prompt/mock provider 基础包、`pnpm run pack` 打包验收。
 - 主线技术栈: TypeScript + Electron + Vue 3 + Vite + pnpm workspace
 - 目标形态: 独立桌面可执行程序，不依赖远程 Web 页面作为主 UI。
 
@@ -100,6 +100,15 @@ pnpm install
 - storage 写入失败只记录 `storage.event_persist_failed`，不阻塞 renderer 事件广播。
 - renderer 仍不接触数据库、文件路径或 Node API。
 - `sqlite3` 在 electron-vite main build 中保持 external，workspace 包保持 inline。
+- `tests/fixtures/douyu-replay.ts` 和 `tests/integration/storage-runtime-event.test.ts` 覆盖 runtime.status，以及 fixture 回放 `douyu.danmaku`、`douyu.gift`、`douyu.user_entered`、`douyu.room_status`、`douyu.capture_error` 的持久化，并验证 room/event type/分页查询。
+
+### M2.0: AI 回复基础包
+
+- `packages/contracts/src/ai.ts`：AI prompt message、persona、reply request、prompt、reply result schema。
+- `packages/ai`：AI 独立包，当前包含 provider interface、prompt builder、token estimate、mock provider。
+- prompt builder 明确分离 system instruction 和 danmaku data block，弹幕文本只进入 user data block。
+- `MockAiProvider` 生成 deterministic 短回复、模型信息、耗时和 token 估算，不接真实 key。
+- AI 单元测试覆盖 prompt 注入隔离、mock provider schema、短回复和不回显危险弹幕指令。
 
 ## 配置默认值
 
@@ -115,9 +124,12 @@ pnpm install
 ```powershell
 pnpm --filter @dybot/storage typecheck
 pnpm --filter @dybot/storage test
+pnpm --filter @dybot/ai typecheck
+pnpm --filter @dybot/ai test
 pnpm --filter @dybot/desktop typecheck
 pnpm --filter @dybot/desktop build
 pnpm exec vitest run tests/integration/storage-runtime-event.test.ts
+node node_modules\vitest\vitest.mjs run tests\integration\storage-runtime-event.test.ts
 pnpm check
 pnpm smoke
 pnpm build
@@ -138,39 +150,38 @@ pnpm dev
 
 M1 剩余风险和补充项：
 
-- 已有 runtime.status event bus -> storage repository 基础集成测试；后续还需要补 `douyu.*` 事件覆盖。
+- 已有 runtime.status 和 fixture `douyu.*` event bus -> storage repository 集成测试；后续可补真实录制 jsonl 回放和更多协议变体。
 - 采集连接失败时 UI 依赖 `douyu.capture_error` 事件展示错误，后续可补更明确的连接状态模型。
 - 当前只接单房间控制，多房间采集还未做。
 
-AI/TTS/音频链路尚未开始：
+AI/TTS/音频链路剩余：
 
-- `packages/ai` 尚未创建。
+- `packages/ai` 只有 prompt/mock provider 基础，还没有接入 core runtime pipeline。
 - `packages/voice` 尚未创建。
 - `packages/audio` 尚未创建。
 - `packages/ui-kit` 尚未创建。
 
 ## 推荐下一步
 
-### 下一步 1: Storage 集成测试补强和打包回归
+### 下一步 1: AI 回复 pipeline
 
-目标：确认 runtime 事件持久化，并把 native driver 打包验证纳入持续回归。
+目标：从 `douyu.danmaku` 进入触发策略，调用 `MockAiProvider` 生成短回复任务。
+
+建议先做 mock pipeline，不接真实 key：
+
+- 在 `packages/core` 增加最小 trigger policy：只处理 `douyu.danmaku`，先使用关键词或全部 mock 触发。
+- 定义 reply task 状态 contract，保留 traceId。
+- runtime 订阅斗鱼弹幕后调用 mock provider，产出 `ai.reply.generated` 类事件。
+- 更新 storage integration，确认 AI 结果后续可入库。
+
+### 下一步 2: Storage 打包回归持续化
+
+目标：把 native driver 打包验证纳入持续回归。
 
 建议先做：
 
-- 扩展集成测试：fake Douyu event -> runtime event subscriber -> storage repository。
-- 验证 `douyu.*` 事件能写入用户数据目录数据库，并检查 room/event type 查询。
-- 保持 `pnpm run pack` 作为 native driver 回归验证；如果后续 pack 失败，优先调整 electron-builder native unpack/rebuild 配置，不允许把数据库逻辑移到 renderer。
-
-### 下一步 2: AI 回复模块
-
-目标：从 `douyu.danmaku` 进入触发策略，调用 mock AI provider 生成短回复。
-
-建议先做 mock provider，不接真实 key：
-
-- `packages/ai` adapter 接口。
-- prompt builder：系统规则、人设、弹幕 data block 分离。
-- token 预算接口占位。
-- mock provider 单测。
+- 保持 `pnpm run pack` 作为 native driver 回归验证。
+- 如果后续 pack 失败，优先调整 electron-builder native unpack/rebuild 配置，不允许把数据库逻辑移到 renderer。
 
 ## 重要文件索引
 
@@ -184,6 +195,7 @@ AI/TTS/音频链路尚未开始：
 - 桌面 app: `apps/desktop`
 - contract 包: `packages/contracts`
 - runtime core: `packages/core`
+- AI 包: `packages/ai`
 - 斗鱼包: `packages/douyu`
 - 默认配置包: `packages/app-config`
 - 日志包: `packages/logging`

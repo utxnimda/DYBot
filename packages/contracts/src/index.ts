@@ -1,3 +1,4 @@
+export * from "./ai";
 export * from "./config";
 export * from "./douyu";
 export * from "./errors";

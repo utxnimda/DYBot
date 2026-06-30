@@ -98,6 +98,12 @@ importers:
         specifier: ^3.5.13
         version: 3.5.39(typescript@5.7.3)
 
+  packages/ai:
+    dependencies:
+      "@dybot/contracts":
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/app-config:
     dependencies:
       "@dybot/contracts":
