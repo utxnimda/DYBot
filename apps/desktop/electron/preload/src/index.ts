@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   BotEventSchema,
+  DouyuStartCaptureRequestSchema,
   HealthSnapshotSchema,
   IpcChannel,
   type BotEvent,
@@ -9,6 +10,10 @@ import {
 
 function parseHealthSnapshot(value: unknown) {
   return HealthSnapshotSchema.parse(value);
+}
+
+function parseDouyuCaptureConfig(value: unknown) {
+  return DouyuStartCaptureRequestSchema.parse(value);
 }
 
 const api: DybotDesktopApi = {
@@ -21,6 +26,18 @@ const api: DybotDesktopApi = {
     },
     async stop() {
       return parseHealthSnapshot(await ipcRenderer.invoke(IpcChannel.BotStop));
+    },
+    douyu: {
+      async getDefaultRoom() {
+        return parseDouyuCaptureConfig(await ipcRenderer.invoke(IpcChannel.DouyuGetDefaultRoom));
+      },
+      async start(input) {
+        const config = parseDouyuCaptureConfig(input);
+        return parseHealthSnapshot(await ipcRenderer.invoke(IpcChannel.DouyuStart, config));
+      },
+      async stop() {
+        return parseHealthSnapshot(await ipcRenderer.invoke(IpcChannel.DouyuStop));
+      },
     },
     onEvent(listener: (event: BotEvent) => void) {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {

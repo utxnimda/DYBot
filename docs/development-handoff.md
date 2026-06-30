@@ -1,14 +1,15 @@
 # Development Handoff
 
-本文档用于在新工作区或其他电脑上继续开发 DYBot。开始任何代码改动前，仍然必须先阅读根目录 `AGENTS.md` 和项目规范文档。
+本文档用于在新工作区或其他电脑继续开发 DYBot。开始任何代码改动前，仍然必须先阅读根目录 `AGENTS.md` 和项目规范文档。
 
 ## 当前仓库状态
 
 - Remote: `https://github.com/utxnimda/DYBot.git`
 - Branch: `main`
-- 当前已推送基线提交: `b70e190 feat: bootstrap desktop bot foundation`
+- 最近已知远端基线提交: `bd14059 docs: add development handoff`；本次提交推送后以 GitHub `main` 最新提交为准
+- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、`pnpm run pack` 打包验收。
 - 主线技术栈: TypeScript + Electron + Vue 3 + Vite + pnpm workspace
-- 目标形态: 独立桌面可执行程序，不依赖远程 Web 页面作为主 UI
+- 目标形态: 独立桌面可执行程序，不依赖远程 Web 页面作为主 UI。
 
 ## 新工作区接手步骤
 
@@ -25,12 +26,12 @@ pnpm dev
 
 - Node.js `>=22.0.0`
 - pnpm `>=10.0.0`，当前 lockfile 使用 `pnpm@11.7.0`
-- Windows 是当前主要验证环境
+- Windows 是当前主要验证环境。
 
-如果新电脑首次安装时 Electron 或 esbuild 的 postinstall 被 pnpm build approval 阻止，执行：
+如果新电脑首次安装时 Electron、esbuild 或 sqlite3 的 postinstall 被 pnpm build approval 阻止，执行：
 
 ```powershell
-pnpm approve-builds electron esbuild
+pnpm approve-builds electron esbuild sqlite3
 pnpm install
 ```
 
@@ -49,8 +50,8 @@ pnpm install
 关键规则：
 
 - `renderer` 不直接访问 Node、socket、文件、数据库或密钥。
-- 任何跨进程通信必须走 `packages/contracts` 中的 typed IPC。
-- 任何跨模块事件必须走 `packages/contracts` 中的 typed event。
+- 跨进程通信必须走 `packages/contracts` 中的 typed IPC。
+- 跨模块事件必须走 `packages/contracts` 中的 typed event。
 - 外部输入必须 schema 校验或协议解析后再进入业务逻辑。
 - 用户运行时配置、密钥、日志、数据库不进入仓库。
 
@@ -58,10 +59,8 @@ pnpm install
 
 ### M0: 工程骨架
 
-已完成：
-
 - pnpm workspace。
-- Electron + Vue/Vite 桌面应用基础骨架。
+- Electron + Vue/Vite 桌面应用骨架。
 - Electron `main`、`preload`、`renderer` 物理隔离。
 - TypeScript strict 基础配置。
 - ESLint、Prettier、Vitest、electron-builder 配置。
@@ -71,19 +70,38 @@ pnpm install
 
 ### M1: 斗鱼采集基础模块
 
-已完成：
-
 - `packages/contracts/src/douyu.ts`：斗鱼事件、房间配置 schema。
 - `packages/douyu`：斗鱼独立采集包。
 - STT 文本协议解析和序列化。
 - 斗鱼 TCP packet 编解码。
 - 登录、入组、心跳、退出命令构造。
 - 弹幕、礼物、用户进场、房间状态、采集错误归一化。
-- `DouyuTcpCaptureClient`：基础 TCP 连接、心跳、断线重连和事件输出。
+- `DouyuTcpCaptureClient`：TCP 连接、心跳、断线重连和事件输出。
 - `packages/core` 注入可选 `DouyuCaptureClient` 并转发 `douyu.*` 事件。
-- 斗鱼协议、packet、normalizer、backoff 单元测试。
+- Electron main 注入 `DouyuTcpCaptureClient` 并注册 `bot:douyu:*` IPC。
+- preload 暴露 `window.dybot.bot.douyu` typed API。
+- renderer 控制台可读取默认房间、启动/停止斗鱼采集，并显示弹幕、礼物、状态、错误事件。
+- 斗鱼协议、packet、normalizer、backoff、IPC contract 单元测试。
 
-### 配置默认值
+### M1.5: Storage 基础包
+
+- `packages/storage`：SQLite storage 独立包。
+- ADR 0002：固定首版 SQLite driver 为 `sqlite` + `sqlite3`。
+- `events` 表 migration 和 schema version 管理。
+- `SqliteEventRepository`：异步写入和查询 `BotEvent`，支持 room、event type、limit、offset 过滤。
+- 重复 `eventId` 写入返回已持久化记录，不覆盖旧记录。
+- 临时文件数据库单元测试覆盖 migration repeatability、事件写入、重复写入、查询排序。
+
+### M1.6: Storage 接入 runtime
+
+- `packages/app-config` 新增用户数据目录下的 runtime data 和默认 SQLite 路径解析。
+- Electron main 启动时初始化用户数据目录中的 `dybot.sqlite`。
+- Electron main 订阅 `RuntimeOrchestrator` 事件并异步持久化到 storage。
+- storage 写入失败只记录 `storage.event_persist_failed`，不阻塞 renderer 事件广播。
+- renderer 仍不接触数据库、文件路径或 Node API。
+- `sqlite3` 在 electron-vite main build 中保持 external，workspace 包保持 inline。
+
+## 配置默认值
 
 - 默认斗鱼测试房间号: `9999`
 - 定义位置: `packages/contracts/src/config.ts` 的 `DEFAULT_DOUYU_TEST_ROOM_ID`
@@ -95,76 +113,62 @@ pnpm install
 最近已通过：
 
 ```powershell
+pnpm --filter @dybot/storage typecheck
+pnpm --filter @dybot/storage test
+pnpm --filter @dybot/desktop typecheck
+pnpm --filter @dybot/desktop build
+pnpm exec vitest run tests/integration/storage-runtime-event.test.ts
 pnpm check
 pnpm smoke
 pnpm build
+pnpm run pack
+pnpm dev
 ```
 
 说明：
 
-- 自动化测试使用 fixture/mock，不连接真实斗鱼房间。
-- `pnpm dev` 已验证可以启动 Electron 开发版，但当前没有保持后台运行。
-- `pnpm build` 会生成 `apps/desktop/out/`，该目录已被 `.gitignore` 忽略。
+- 自动化测试使用 fixture/mock，不连接真实 AI/TTS key。
+- `pnpm dev` 已启动到 `storage.ready` 和 `desktop.ready`，验证 Electron main 可以初始化 SQLite storage；验证后已手动结束 dev 进程。
+- dev 过程中出现过 Chromium SSL handshake 背景日志，不影响本地应用 ready。
+- 真实斗鱼房间 `9999` 包级网络验收已通过：`DouyuTcpCaptureClient` 连接成功，收到 `connected`、`joined_group`、`login_ok`、`heartbeat`、`danmaku`、`gift`、`user_entered`、`disconnected` 事件；30 秒窗口内计数为 room_status 9、danmaku 97、gift 39、user_entered 155。
+- Electron 构建产物 UI 按钮路径已通过真实房间验收：preload 注入 `window.dybot` 正常，点击“连接”后 UI 显示 `login_ok`、弹幕计数 1、礼物计数 2，事件流包含 `douyu.danmaku` 和 `douyu.gift`；点击“断开”后 UI 状态为 `disconnected`。
+- `pnpm build` 会生成 `apps/desktop/out/`，该目录已被 `.gitignore` 忽略。`pnpm run pack` 已通过，electron-builder 执行了 `@electron/rebuild` 并为 `sqlite3` 准备 native 依赖，产出 `release/win-unpacked`，release 目录已被忽略。
 
 ## 当前尚未完成
 
-M1 还没有完整闭环到 UI：
+M1 剩余风险和补充项：
 
-- `DouyuTcpCaptureClient` 还未在 `apps/desktop/electron/main` 中实例化并注入 runtime。
-- preload IPC 还没有暴露“启动/停止斗鱼采集”和“读取默认斗鱼配置”的 typed API。
-- renderer UI 还没有房间号输入、连接/断开按钮、弹幕/礼物实时流展示。
-- 没有真实斗鱼房间手工验收记录。
-- 事件还没有入库，`packages/storage` 尚未创建。
+- 已有 runtime.status event bus -> storage repository 基础集成测试；后续还需要补 `douyu.*` 事件覆盖。
+- 采集连接失败时 UI 依赖 `douyu.capture_error` 事件展示错误，后续可补更明确的连接状态模型。
+- 当前只接单房间控制，多房间采集还未做。
 
 AI/TTS/音频链路尚未开始：
 
 - `packages/ai` 尚未创建。
 - `packages/voice` 尚未创建。
 - `packages/audio` 尚未创建。
-- `packages/storage` 尚未创建。
 - `packages/ui-kit` 尚未创建。
 
 ## 推荐下一步
 
-### 下一步 1: 接通斗鱼采集到桌面 UI
+### 下一步 1: Storage 集成测试补强和打包回归
 
-目标：启动桌面应用后可以用默认房间 `9999` 连接斗鱼，并在 UI 看到弹幕/礼物事件。
-
-建议拆分：
-
-1. 在 `apps/desktop/electron/main/src/index.ts` 创建 `DouyuTcpCaptureClient` 并注入 `createRuntimeOrchestrator`。
-2. 在 `packages/contracts/src/ipc.ts` 增加 typed IPC：
-   - `bot:douyu:get-default-room`
-   - `bot:douyu:start`
-   - `bot:douyu:stop`
-3. preload 暴露最小 API，并用 schema 校验入参和出参。
-4. renderer 增加房间配置和连接状态区域。
-5. renderer 订阅 `douyu.danmaku`、`douyu.gift`、`douyu.room_status`、`douyu.capture_error` 并显示事件流。
-6. 补单元测试或 IPC schema 测试。
-7. 跑 `pnpm check`、`pnpm smoke`、`pnpm build`。
-
-注意：renderer 不能直接 import `@dybot/douyu`，只能通过 preload 暴露的 typed API 和 `BotEvent` 事件工作。
-
-### 下一步 2: 创建 storage 包
-
-目标：将斗鱼事件入库，为后续上下文、AI prompt、统计、回放测试打基础。
+目标：确认 runtime 事件持久化，并把 native driver 打包验证纳入持续回归。
 
 建议先做：
 
-- `packages/storage` 包结构。
-- SQLite 选型 ADR 或说明，先固定 `better-sqlite3` 或 `sqlite` 之一。
-- migration 基础设施。
-- `events` 表和 repository。
-- fake/memory 或临时文件数据库测试。
+- 扩展集成测试：fake Douyu event -> runtime event subscriber -> storage repository。
+- 验证 `douyu.*` 事件能写入用户数据目录数据库，并检查 room/event type 查询。
+- 保持 `pnpm run pack` 作为 native driver 回归验证；如果后续 pack 失败，优先调整 electron-builder native unpack/rebuild 配置，不允许把数据库逻辑移到 renderer。
 
-### 下一步 3: AI 回复模块
+### 下一步 2: AI 回复模块
 
 目标：从 `douyu.danmaku` 进入触发策略，调用 mock AI provider 生成短回复。
 
 建议先做 mock provider，不接真实 key：
 
 - `packages/ai` adapter 接口。
-- prompt builder，系统规则、人设、弹幕 data block 分离。
+- prompt builder：系统规则、人设、弹幕 data block 分离。
 - token 预算接口占位。
 - mock provider 单测。
 
@@ -176,12 +180,14 @@ AI/TTS/音频链路尚未开始：
 - 目录规范: `docs/project-structure.md`
 - 工程基础要求: `docs/engineering-foundation.md`
 - Electron 技术 ADR: `docs/adr/0001-electron-typescript-vue.md`
+- SQLite driver ADR: `docs/adr/0002-sqlite-storage-driver.md`
 - 桌面 app: `apps/desktop`
 - contract 包: `packages/contracts`
 - runtime core: `packages/core`
 - 斗鱼包: `packages/douyu`
 - 默认配置包: `packages/app-config`
 - 日志包: `packages/logging`
+- 存储包: `packages/storage`
 
 ## Git 约定
 

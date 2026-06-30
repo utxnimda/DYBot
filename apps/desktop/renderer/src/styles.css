@@ -21,7 +21,8 @@ body {
   min-height: 640px;
 }
 
-button {
+button,
+input {
   font: inherit;
 }
 
@@ -101,7 +102,9 @@ button {
 .topbar,
 .panel-heading,
 .status-pill,
-.runtime-actions {
+.runtime-actions,
+.inline-status,
+.douyu-form {
   display: flex;
   align-items: center;
 }
@@ -141,14 +144,20 @@ button {
   height: 9px;
   border-radius: 999px;
   background: #94a3b8;
+  flex: 0 0 auto;
 }
 
-.status-running {
+.status-running,
+.status-connected,
+.status-login_ok,
+.status-joined_group,
+.status-heartbeat {
   background: #16a34a;
 }
 
 .status-starting,
-.status-stopping {
+.status-stopping,
+.status-connecting {
   background: #f59e0b;
 }
 
@@ -186,6 +195,7 @@ button {
   display: block;
   margin: 10px 0 4px;
   font-size: 22px;
+  overflow-wrap: anywhere;
 }
 
 .panel-grid {
@@ -195,8 +205,12 @@ button {
 }
 
 .panel {
-  min-height: 260px;
+  min-height: 220px;
   padding: 18px;
+}
+
+.event-panel {
+  grid-row: span 2;
 }
 
 .panel-heading {
@@ -209,8 +223,35 @@ button {
   font-size: 17px;
 }
 
-.runtime-actions {
+.inline-status {
+  gap: 7px;
+}
+
+.runtime-actions,
+.douyu-form {
   gap: 10px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #344054;
+  font-size: 13px;
+}
+
+.room-input {
+  width: 132px;
+  height: 38px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #172033;
+  background: #ffffff;
+}
+
+.room-input:focus {
+  border-color: #2563eb;
+  outline: 2px solid rgb(37 99 235 / 16%);
 }
 
 .primary-button,
@@ -241,6 +282,7 @@ button {
 
 .error-text {
   color: #b42318;
+  overflow-wrap: anywhere;
 }
 
 .event-list {
@@ -252,14 +294,27 @@ button {
 }
 
 .event-list li {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  min-height: 34px;
+  min-height: 46px;
   align-items: center;
   padding: 8px 10px;
   border-radius: 6px;
   background: #f8fafc;
+}
+
+.event-list span {
+  display: block;
+  color: #344054;
+  font-size: 13px;
+}
+
+.event-list p {
+  margin: 3px 0 0;
+  color: #172033;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .event-list code {

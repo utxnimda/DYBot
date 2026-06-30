@@ -1,0 +1,26 @@
+# Prettier does not parse ignore files themselves in this project setup.
+.prettierignore
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+out/
+release/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# Runtime data
+data/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# SQL migrations are formatted manually.
+packages/storage/migrations/*.sql

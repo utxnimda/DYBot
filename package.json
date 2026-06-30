@@ -18,10 +18,15 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "smoke": "tsx scripts/smoke.ts",
-    "pack": "pnpm --filter @dybot/desktop pack",
-    "release": "pnpm --filter @dybot/desktop release"
+    "pack": "pnpm --filter @dybot/desktop run pack",
+    "release": "pnpm --filter @dybot/desktop run release"
   },
   "devDependencies": {
+    "@dybot/contracts": "workspace:*",
+    "@dybot/core": "workspace:*",
+    "@dybot/douyu": "workspace:*",
+    "@dybot/storage": "workspace:*",
+    "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.51.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^5.2.1",
@@ -37,9 +42,6 @@
     "vite": "^6.0.3",
     "vitest": "^2.1.8",
     "vue-eslint-parser": "^9.4.3",
-    "vue-tsc": "^2.2.0",
-    "@eslint/js": "^9.17.0",
-    "@dybot/core": "workspace:*",
-    "@dybot/douyu": "workspace:*"
+    "vue-tsc": "^2.2.0"
   }
 }

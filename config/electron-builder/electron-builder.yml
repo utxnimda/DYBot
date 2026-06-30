@@ -1,5 +1,6 @@
 appId: net.dybot.desktop
 productName: DYBot
+electronVersion: 34.5.8
 directories:
   output: release
 files:

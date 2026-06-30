@@ -24,6 +24,8 @@
 - `packages/contracts`：跨模块事件、IPC、配置、错误和日志 schema。
 - `packages/core`：runtime orchestrator，负责统一状态和事件转发。
 - `packages/douyu`：斗鱼协议、TCP 采集、心跳、重连和弹幕/礼物事件归一化，不调用 AI/TTS/UI。
+- `packages/storage`：SQLite 连接、migration 和 events repository，负责后续事件入库。
+- 斗鱼采集 UI：桌面控制台通过 preload IPC 启动/停止默认房间采集并显示事件流。
 - `packages/app-config`：运行时配置和用户数据目录解析。
 - `packages/logging`：结构化日志和脱敏。
 

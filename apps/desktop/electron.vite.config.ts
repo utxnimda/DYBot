@@ -1,4 +1,4 @@
-﻿import { resolve } from "node:path";
+import { resolve } from "node:path";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
@@ -6,12 +6,20 @@ const workspacePackages = [
   "@dybot/app-config",
   "@dybot/contracts",
   "@dybot/core",
+  "@dybot/douyu",
   "@dybot/logging",
+  "@dybot/storage",
 ];
+
+const nativeRuntimeDependencies = ["sqlite3"];
+const externalizeOptions = {
+  exclude: workspacePackages,
+  include: nativeRuntimeDependencies,
+};
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: workspacePackages })],
+    plugins: [externalizeDepsPlugin(externalizeOptions)],
     build: {
       rollupOptions: {
         input: resolve(__dirname, "electron/main/src/index.ts"),
@@ -19,10 +27,15 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin({ exclude: workspacePackages })],
+    plugins: [externalizeDepsPlugin(externalizeOptions)],
     build: {
       rollupOptions: {
         input: resolve(__dirname, "electron/preload/src/index.ts"),
+        output: {
+          // Sandboxed Electron preload scripts cannot run ESM imports reliably.
+          entryFileNames: "[name].cjs",
+          format: "cjs",
+        },
       },
     },
   },

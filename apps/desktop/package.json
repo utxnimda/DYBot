@@ -2,13 +2,18 @@
   "name": "@dybot/desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "DYBot desktop assistant application.",
+  "author": "DYBot Contributors",
   "type": "module",
   "main": "./out/main/index.js",
   "dependencies": {
     "@dybot/app-config": "workspace:*",
     "@dybot/contracts": "workspace:*",
     "@dybot/core": "workspace:*",
+    "@dybot/douyu": "workspace:*",
     "@dybot/logging": "workspace:*",
+    "@dybot/storage": "workspace:*",
+    "sqlite3": "^6.0.1",
     "vue": "^3.5.13"
   },
   "scripts": {

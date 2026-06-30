@@ -5,3 +5,4 @@ export * from "./events";
 export * from "./ids";
 export * from "./ipc";
 export * from "./logging";
+export * from "./storage";

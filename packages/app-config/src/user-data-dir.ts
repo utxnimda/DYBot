@@ -27,3 +27,11 @@ export function resolveUserDataDir(options: ResolveUserDataDirOptions = {}): str
 
   return join(env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), appName);
 }
+
+export function resolveRuntimeDataDir(options: ResolveUserDataDirOptions = {}): string {
+  return join(resolveUserDataDir(options), "data");
+}
+
+export function resolveDefaultStorageDatabasePath(options: ResolveUserDataDirOptions = {}): string {
+  return join(resolveRuntimeDataDir(options), "dybot.sqlite");
+}

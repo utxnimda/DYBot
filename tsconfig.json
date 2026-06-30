@@ -1,12 +1,14 @@
 {
   "extends": "./config/tsconfig/node.json",
   "files": ["vitest.config.ts", "scripts/smoke.ts"],
+  "include": ["tests/**/*.ts"],
   "references": [
     { "path": "./apps/desktop" },
     { "path": "./packages/contracts" },
     { "path": "./packages/core" },
     { "path": "./packages/douyu" },
     { "path": "./packages/logging" },
-    { "path": "./packages/app-config" }
+    { "path": "./packages/app-config" },
+    { "path": "./packages/storage" }
   ]
 }
