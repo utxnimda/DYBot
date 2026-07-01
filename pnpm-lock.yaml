@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     devDependencies:
+      "@dybot/ai":
+        specifier: workspace:*
+        version: link:packages/ai
       "@dybot/contracts":
         specifier: workspace:*
         version: link:packages/contracts
@@ -76,6 +79,9 @@ importers:
       "@dybot/app-config":
         specifier: workspace:*
         version: link:../../packages/app-config
+      "@dybot/ai":
+        specifier: workspace:*
+        version: link:../../packages/ai
       "@dybot/contracts":
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -118,6 +124,9 @@ importers:
 
   packages/core:
     dependencies:
+      "@dybot/ai":
+        specifier: workspace:*
+        version: link:../ai
       "@dybot/contracts":
         specifier: workspace:*
         version: link:../contracts

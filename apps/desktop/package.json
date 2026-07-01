@@ -8,6 +8,7 @@
   "main": "./out/main/index.js",
   "dependencies": {
     "@dybot/app-config": "workspace:*",
+    "@dybot/ai": "workspace:*",
     "@dybot/contracts": "workspace:*",
     "@dybot/core": "workspace:*",
     "@dybot/douyu": "workspace:*",

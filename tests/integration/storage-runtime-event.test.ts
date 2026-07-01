@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DouyuRoomCaptureConfigSchema, type BotEvent, type DouyuEvent } from "@dybot/contracts";
+import { MockAiProvider } from "@dybot/ai";
+import {
+  DouyuRoomCaptureConfigSchema,
+  type AiEvent,
+  type BotEvent,
+  type DouyuEvent,
+} from "@dybot/contracts";
 import { createRuntimeOrchestrator } from "@dybot/core";
 import {
   createDouyuCaptureErrorEvent,
@@ -151,6 +157,50 @@ describe("runtime event storage integration", () => {
       await service.close();
     }
   });
+
+  it("persists AI reply events generated from forwarded Douyu danmaku", async () => {
+    const service = await createStorageService({ filePath: createTempDatabasePath() });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient(createDouyuReplayEvents()),
+      aiProvider: new MockAiProvider(),
+      now: () => 30_000,
+    });
+    const persistedEvents: Array<Promise<void>> = [];
+    const unsubscribe = runtime.onEvent((event) => {
+      persistedEvents.push(persistEvent(service, event));
+    });
+    const aiEventPromise = waitForRuntimeEvent<Extract<AiEvent, { type: "ai.reply.generated" }>>(
+      runtime,
+      (event): event is Extract<AiEvent, { type: "ai.reply.generated" }> =>
+        event.type === "ai.reply.generated",
+    );
+
+    try {
+      await runtime.startDouyuCapture(
+        DouyuRoomCaptureConfigSchema.parse({ roomId: douyuReplayRoomId }),
+      );
+      const aiEvent = await aiEventPromise;
+      await Promise.all(persistedEvents);
+
+      const records = await service.events.list({
+        roomId: douyuReplayRoomId,
+        eventTypes: ["ai.reply.generated"],
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records.at(0)?.eventId).toBe(aiEvent.payload.eventId);
+      expect(records.at(0)?.roomId).toBe(douyuReplayRoomId);
+      expect(records.at(0)?.traceId).toBe(aiEvent.traceId);
+      expect(records.at(0)?.event.type).toBe("ai.reply.generated");
+      expect(aiEvent.payload.result.text).toContain("tester");
+      expect(aiEvent.payload.result.promptSummary.messageCount).toBe(2);
+      expect("prompt" in aiEvent.payload.result).toBe(false);
+      expect(aiEvent.payload.task.triggerType).toBe("douyu.danmaku");
+    } finally {
+      unsubscribe();
+      await service.close();
+    }
+  });
 });
 
 async function getSingleStoredEvent<TEventType extends DouyuEvent["type"]>(
@@ -195,4 +245,21 @@ function createDouyuReplayEvents(): DouyuEvent[] {
   });
 
   return [...normalizedEvents, captureError];
+}
+
+function waitForRuntimeEvent<TEvent extends BotEvent>(
+  runtime: ReturnType<typeof createRuntimeOrchestrator>,
+  predicate: (event: BotEvent) => event is TEvent,
+): Promise<TEvent> {
+  return new Promise((resolve) => {
+    let unsubscribe: (() => void) | null = null;
+    unsubscribe = runtime.onEvent((event) => {
+      if (!predicate(event)) {
+        return;
+      }
+
+      unsubscribe?.();
+      resolve(event);
+    });
+  });
 }

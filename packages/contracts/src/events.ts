@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  AiReplyFailedEventSchema,
+  AiReplyGeneratedEventSchema,
+  AiReplySkippedEventSchema,
+} from "./ai";
+import {
   DouyuCaptureErrorEventSchema,
   DouyuDanmakuEventSchema,
   DouyuGiftEventSchema,
@@ -49,6 +54,9 @@ export const BotEventSchema = z.discriminatedUnion("type", [
   DouyuUserEnteredEventSchema,
   DouyuRoomStatusEventSchema,
   DouyuCaptureErrorEventSchema,
+  AiReplyGeneratedEventSchema,
+  AiReplyFailedEventSchema,
+  AiReplySkippedEventSchema,
 ]);
 
 export type RuntimeStatusEvent = z.infer<typeof RuntimeStatusEventSchema>;

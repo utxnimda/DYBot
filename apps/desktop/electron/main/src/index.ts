@@ -2,8 +2,9 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { getDefaultAppConfig, resolveDefaultStorageDatabasePath } from "@dybot/app-config";
+import { MockAiProvider } from "@dybot/ai";
 import { DouyuRoomCaptureConfigSchema, IpcChannel, type BotEvent } from "@dybot/contracts";
-import { createRuntimeOrchestrator } from "@dybot/core";
+import { createRuntimeOrchestrator, type RuntimeOrchestratorOptions } from "@dybot/core";
 import { DouyuTcpCaptureClient } from "@dybot/douyu";
 import { createLogger } from "@dybot/logging";
 import { createStorageService, type StorageService } from "@dybot/storage";
@@ -11,10 +12,14 @@ import { createStorageService, type StorageService } from "@dybot/storage";
 const logger = createLogger({ module: "desktop-main" });
 const appConfig = getDefaultAppConfig();
 const douyuCapture = new DouyuTcpCaptureClient({ logger: createLogger({ module: "douyu" }) });
-const runtime = createRuntimeOrchestrator({
+const runtimeOptions: RuntimeOrchestratorOptions = {
   logger: createLogger({ module: "runtime" }),
   douyuCapture,
-});
+};
+if (appConfig.features.aiReply) {
+  runtimeOptions.aiProvider = new MockAiProvider();
+}
+const runtime = createRuntimeOrchestrator(runtimeOptions);
 
 let storageService: StorageService | null = null;
 let runtimeEventUnsubscribe: (() => void) | null = null;

@@ -7,7 +7,7 @@
 - Remote: `https://github.com/utxnimda/DYBot.git`
 - Branch: `main`
 - 最近已知远端基线提交: `bd14059 docs: add development handoff`；本次提交推送后以 GitHub `main` 最新提交为准
-- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、AI contracts/prompt/mock provider 基础包、`pnpm run pack` 打包验收。
+- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、AI contracts/prompt/mock provider 基础包、AI mock reply pipeline、`pnpm run pack` 打包验收。
 - 主线技术栈: TypeScript + Electron + Vue 3 + Vite + pnpm workspace
 - 目标形态: 独立桌面可执行程序，不依赖远程 Web 页面作为主 UI。
 
@@ -110,6 +110,20 @@ pnpm install
 - `MockAiProvider` 生成 deterministic 短回复、模型信息、耗时和 token 估算，不接真实 key。
 - AI 单元测试覆盖 prompt 注入隔离、mock provider schema、短回复和不回显危险弹幕指令。
 
+### M2.1: AI mock reply pipeline
+
+- `packages/contracts/src/ai.ts` 新增 `AiReplyTask`、`ai.reply.generated`、`ai.reply.failed` typed event contract。
+- `packages/contracts/src/ai.ts` 新增 `ai.reply.skipped`，AI generated event 只携带 prompt hash/消息数/字符数摘要，不再广播或入库完整 prompt。
+- `packages/contracts/src/event-metadata.ts` 新增 `getBotEventMetadata()`，storage 和 renderer 复用同一套 eventId/roomId/occurredAt 提取逻辑。
+- `packages/core` 拆出 `AiReplyPipeline`、`DanmakuContextWindow`、`AiReplyTaskFactory`、`AiReplyTriggerPolicy`，runtime 只负责装配和事件转发。
+- AI pipeline 支持 max concurrency、queue length、关键词/全局/用户冷却、stop cancellation 和 skipped reason。
+- 停止态弹幕只产出 `runtime_stopped` skipped event，不写入上下文窗口，避免重启后污染后续 AI prompt。
+- AI reply task 保留原始弹幕 `traceId`、`roomId`、`triggerEventId`，并携带 provider/model/token/latency 估算。
+- AI provider 失败时产出 `ai.reply.failed` 可恢复事件，不阻塞后续斗鱼事件。
+- Electron main 只在 `features.aiReply` 为 true 时注入 `MockAiProvider`；renderer 事件流可展示 AI reply/skipped，并在概览统计 reply 数。
+- storage repository 已支持 AI reply events 的 eventId、roomId、occurredAt 提取；集成测试覆盖 AI reply 入库。
+- 根 `package.json` 脚本内部已统一使用 `corepack pnpm`，避免当前 Windows shell 缺少全局 pnpm shim 时失败。
+
 ## 配置默认值
 
 - 默认斗鱼测试房间号: `9999`
@@ -126,13 +140,21 @@ pnpm --filter @dybot/storage typecheck
 pnpm --filter @dybot/storage test
 pnpm --filter @dybot/ai typecheck
 pnpm --filter @dybot/ai test
+pnpm --filter @dybot/contracts typecheck
+pnpm --filter @dybot/core typecheck
+pnpm --filter @dybot/core test
 pnpm --filter @dybot/desktop typecheck
 pnpm --filter @dybot/desktop build
+corepack pnpm -r typecheck
+corepack pnpm test
+corepack pnpm build
+corepack pnpm -r build
+corepack pnpm smoke
+node node_modules\eslint\bin\eslint.js . --max-warnings=0
+node node_modules\prettier\bin\prettier.cjs --check <本次改动文件>
 pnpm exec vitest run tests/integration/storage-runtime-event.test.ts
 node node_modules\vitest\vitest.mjs run tests\integration\storage-runtime-event.test.ts
-pnpm check
-pnpm smoke
-pnpm build
+node node_modules\vitest\vitest.mjs run packages\core\tests\runtime-orchestrator.test.ts
 pnpm run pack
 pnpm dev
 ```
@@ -140,6 +162,8 @@ pnpm dev
 说明：
 
 - 自动化测试使用 fixture/mock，不连接真实 AI/TTS key。
+- 本轮已修复根脚本内部裸 `pnpm` 调用；当前 Windows shell 可直接使用 `corepack pnpm build`。
+- 全仓库 `prettier --check .` 仍会命中历史格式差异；本轮已格式化并校验本次改动文件，未做全仓库格式化 churn。
 - `pnpm dev` 已启动到 `storage.ready` 和 `desktop.ready`，验证 Electron main 可以初始化 SQLite storage；验证后已手动结束 dev 进程。
 - dev 过程中出现过 Chromium SSL handshake 背景日志，不影响本地应用 ready。
 - 真实斗鱼房间 `9999` 包级网络验收已通过：`DouyuTcpCaptureClient` 连接成功，收到 `connected`、`joined_group`、`login_ok`、`heartbeat`、`danmaku`、`gift`、`user_entered`、`disconnected` 事件；30 秒窗口内计数为 room_status 9、danmaku 97、gift 39、user_entered 155。
@@ -156,25 +180,35 @@ M1 剩余风险和补充项：
 
 AI/TTS/音频链路剩余：
 
-- `packages/ai` 只有 prompt/mock provider 基础，还没有接入 core runtime pipeline。
+- AI runtime pipeline 当前仍只接 `MockAiProvider`，默认配置下 `features.aiReply=false` 不会启用；尚未做真实 provider 配置、模型列表、规则 UI 和 reply_tasks 专表。
 - `packages/voice` 尚未创建。
 - `packages/audio` 尚未创建。
 - `packages/ui-kit` 尚未创建。
 
 ## 推荐下一步
 
-### 下一步 1: AI 回复 pipeline
+### 下一步 1: Voice/TTS mock pipeline
 
-目标：从 `douyu.danmaku` 进入触发策略，调用 `MockAiProvider` 生成短回复任务。
+目标：从 `ai.reply.generated` 进入 mock TTS，生成可进入播放队列的语音任务。
 
 建议先做 mock pipeline，不接真实 key：
 
-- 在 `packages/core` 增加最小 trigger policy：只处理 `douyu.danmaku`，先使用关键词或全部 mock 触发。
-- 定义 reply task 状态 contract，保留 traceId。
-- runtime 订阅斗鱼弹幕后调用 mock provider，产出 `ai.reply.generated` 类事件。
-- 更新 storage integration，确认 AI 结果后续可入库。
+- 创建 `packages/voice`：TTS provider interface、mock provider、文本清洗入口、token/耗时占位统计。
+- 在 `packages/contracts` 定义 voice task / `voice.synthesis.generated` / `voice.synthesis.failed` 事件。
+- runtime 监听 `ai.reply.generated` 后调用 mock TTS provider，继续保留同一 `traceId`。
+- 更新 storage integration，确认 AI -> voice 结果可入库。
 
-### 下一步 2: Storage 打包回归持续化
+### 下一步 2: AI config/profile hardening
+
+目标：把 AI mock pipeline 从代码默认项推进到可配置的直播间 profile。
+
+建议先做：
+
+- 在 app-config profile 中表达 AI 开关、关键词、用户冷却、全局冷却、队列长度和并发。
+- UI 提供 AI mock pipeline 的启停、规则展示和 skipped reason 过滤。
+- 后续再接真实 provider profile，不把真实 API key 或 provider base URL 放进仓库。
+
+### 下一步 3: Storage 打包回归持续化
 
 目标：把 native driver 打包验证纳入持续回归。
 

@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@dybot/ai": "workspace:*",
     "@dybot/contracts": "workspace:*",
     "@dybot/douyu": "workspace:*",
     "@dybot/logging": "workspace:*"

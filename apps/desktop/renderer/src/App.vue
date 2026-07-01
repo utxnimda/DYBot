@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type {
-  BotEvent,
-  DouyuEvent,
-  DouyuRoomCaptureConfig,
-  HealthSnapshot,
-} from "@dybot/contracts";
+import type { BotEvent, DouyuRoomCaptureConfig, HealthSnapshot } from "@dybot/contracts";
+import { getBotEventMetadata } from "@dybot/contracts";
 
 const health = ref<HealthSnapshot | null>(null);
 const events = ref<BotEvent[]>([]);
@@ -18,6 +14,7 @@ const defaultDouyuConfig = ref<DouyuRoomCaptureConfig | null>(null);
 const douyuStatus = ref("idle");
 const danmakuCount = ref(0);
 const giftCount = ref(0);
+const aiReplyCount = ref(0);
 
 const statusLabel = computed(() => health.value?.status ?? "idle");
 const isRunning = computed(
@@ -113,6 +110,11 @@ function onBotEvent(event: BotEvent): void {
     return;
   }
 
+  if (event.type === "ai.reply.generated") {
+    aiReplyCount.value += 1;
+    return;
+  }
+
   if (event.type === "douyu.room_status") {
     douyuStatus.value = event.payload.status;
     return;
@@ -125,11 +127,7 @@ function onBotEvent(event: BotEvent): void {
 }
 
 function eventKey(event: BotEvent): string {
-  if (isDouyuEvent(event)) {
-    return `${event.payload.eventId}-${event.traceId}`;
-  }
-
-  return `${event.type}-${event.traceId}`;
+  return getBotEventMetadata(event).stableId;
 }
 
 function eventSummary(event: BotEvent): string {
@@ -153,23 +151,17 @@ function eventSummary(event: BotEvent): string {
       return event.payload.message ?? `room ${event.payload.status}`;
     case "douyu.capture_error":
       return event.payload.message;
+    case "ai.reply.generated":
+      return `AI reply: ${event.payload.result.text}`;
+    case "ai.reply.failed":
+      return `AI reply failed: ${event.payload.error.message}`;
+    case "ai.reply.skipped":
+      return `AI reply skipped: ${event.payload.reason}`;
   }
 }
 
 function eventTime(event: BotEvent): string {
-  if (isDouyuEvent(event)) {
-    return new Date(event.payload.receivedAt).toLocaleTimeString();
-  }
-
-  if (event.type === "runtime.status") {
-    return new Date(event.payload.updatedAt).toLocaleTimeString();
-  }
-
-  return "--";
-}
-
-function isDouyuEvent(event: BotEvent): event is DouyuEvent {
-  return event.type.startsWith("douyu.");
+  return new Date(getBotEventMetadata(event).occurredAt).toLocaleTimeString();
 }
 
 onMounted(async () => {
@@ -229,6 +221,11 @@ onBeforeUnmount(() => {
           <span class="metric-label">礼物</span>
           <strong>{{ giftCount }}</strong>
           <small>Gifts</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">AI</span>
+          <strong>{{ aiReplyCount }}</strong>
+          <small>Replies</small>
         </article>
         <article class="metric-card">
           <span class="metric-label">播放队列</span>

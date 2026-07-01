@@ -3,6 +3,7 @@ import {
   StoredEventQuerySchema,
   StoredEventRecordSchema,
   createEventId,
+  getBotEventMetadata,
   type BotEvent,
   type StoredEventQuery,
   type StoredEventRecord,
@@ -54,12 +55,13 @@ export class SqliteEventRepository {
 
   async insert(event: BotEvent, storedAt = Date.now()): Promise<StoredEventRecord> {
     const parsedEvent = BotEventSchema.parse(event);
+    const metadata = getBotEventMetadata(parsedEvent);
     const record = StoredEventRecordSchema.parse({
-      eventId: getEventId(parsedEvent),
-      eventType: parsedEvent.type,
-      traceId: parsedEvent.traceId,
-      roomId: getRoomId(parsedEvent),
-      occurredAt: getOccurredAt(parsedEvent),
+      eventId: metadata.sourceEventId ?? createEventId(),
+      eventType: metadata.eventType,
+      traceId: metadata.traceId,
+      roomId: metadata.roomId,
+      occurredAt: metadata.occurredAt,
       storedAt,
       event: parsedEvent,
     });
@@ -144,50 +146,4 @@ function rowToStoredEventRecord(row: EventRow): StoredEventRecord {
     storedAt: row.stored_at,
     event,
   });
-}
-
-function getEventId(event: BotEvent): string {
-  switch (event.type) {
-    case "douyu.danmaku":
-    case "douyu.gift":
-    case "douyu.user_entered":
-    case "douyu.room_status":
-    case "douyu.capture_error":
-      return event.payload.eventId;
-    case "runtime.status":
-    case "log.entry":
-      return createEventId();
-  }
-}
-
-function getOccurredAt(event: BotEvent): number {
-  switch (event.type) {
-    case "douyu.danmaku":
-    case "douyu.gift":
-    case "douyu.user_entered":
-    case "douyu.room_status":
-    case "douyu.capture_error":
-      return event.payload.receivedAt;
-    case "runtime.status":
-      return event.payload.updatedAt;
-    case "log.entry": {
-      const parsed = Date.parse(event.payload.ts);
-      return Number.isFinite(parsed) ? parsed : Date.now();
-    }
-  }
-}
-
-function getRoomId(event: BotEvent): string | null {
-  switch (event.type) {
-    case "douyu.danmaku":
-    case "douyu.gift":
-    case "douyu.user_entered":
-    case "douyu.room_status":
-    case "douyu.capture_error":
-      return event.payload.roomId;
-    case "log.entry":
-      return event.payload.roomId ?? null;
-    case "runtime.status":
-      return null;
-  }
 }

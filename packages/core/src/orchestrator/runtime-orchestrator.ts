@@ -2,18 +2,30 @@ import { EventEmitter } from "node:events";
 import {
   createBotError,
   createTraceId,
+  type AiPersonaConfig,
   type BotEvent,
   type BotError,
   type DouyuRoomCaptureConfig,
   type HealthSnapshot,
   type RuntimeStatus,
 } from "@dybot/contracts";
+import type { AiProvider } from "@dybot/ai";
 import type { DouyuCaptureClient } from "@dybot/douyu";
 import { createLogger, type Logger } from "@dybot/logging";
+import { AiReplyPipeline } from "../pipeline/ai-reply-pipeline";
+import type { AiReplyTriggerPolicy } from "../trigger-policy/ai-reply-trigger-policy";
 
 export interface RuntimeOrchestratorOptions {
   logger?: Logger;
   douyuCapture?: DouyuCaptureClient;
+  aiProvider?: AiProvider;
+  aiReplyPolicy?: AiReplyTriggerPolicy;
+  aiPersona?: AiPersonaConfig;
+  aiMaxOutputChars?: number;
+  aiRecentDanmakuLimit?: number;
+  aiMaxConcurrency?: number;
+  aiMaxQueueLength?: number;
+  now?: () => number;
 }
 
 type RuntimeEventListener = (event: BotEvent) => void;
@@ -22,6 +34,7 @@ export class RuntimeOrchestrator {
   readonly #events = new EventEmitter();
   readonly #logger: Logger;
   readonly #douyuCapture: DouyuCaptureClient | null;
+  readonly #aiReplyPipeline: AiReplyPipeline | null;
   #douyuEventUnsubscribe: (() => void) | null = null;
   #status: RuntimeStatus = "idle";
   #startedAt: number | null = null;
@@ -30,6 +43,21 @@ export class RuntimeOrchestrator {
   constructor(options: RuntimeOrchestratorOptions = {}) {
     this.#logger = options.logger ?? createLogger({ module: "runtime" });
     this.#douyuCapture = options.douyuCapture ?? null;
+    this.#aiReplyPipeline =
+      options.aiProvider === undefined
+        ? null
+        : new AiReplyPipeline({
+            provider: options.aiProvider,
+            logger: this.#logger,
+            emitEvent: (event) => this.#events.emit("event", event),
+            policy: options.aiReplyPolicy,
+            persona: options.aiPersona,
+            maxOutputChars: options.aiMaxOutputChars,
+            recentDanmakuLimit: options.aiRecentDanmakuLimit,
+            maxConcurrency: options.aiMaxConcurrency,
+            maxQueueLength: options.aiMaxQueueLength,
+            now: options.now,
+          });
   }
 
   onEvent(listener: RuntimeEventListener): () => void {
@@ -53,6 +81,7 @@ export class RuntimeOrchestrator {
     }
 
     this.#setStatus("starting");
+    this.#aiReplyPipeline?.reset();
     this.#startedAt = Date.now();
     this.#lastError = null;
     this.#logger.info("runtime.start", "Runtime orchestrator started");
@@ -73,6 +102,7 @@ export class RuntimeOrchestrator {
         });
       });
     }
+    this.#aiReplyPipeline?.stop();
     this.#logger.info("runtime.stop", "Runtime orchestrator stopped");
     this.#startedAt = null;
     this.#setStatus("stopped");
@@ -122,6 +152,9 @@ export class RuntimeOrchestrator {
 
     this.#douyuEventUnsubscribe = this.#douyuCapture.onEvent((event) => {
       this.#events.emit("event", event);
+      if (event.type === "douyu.danmaku") {
+        this.#aiReplyPipeline?.handleDanmaku(event);
+      }
     });
   }
 
