@@ -1,5 +1,5 @@
 {
-  "name": "@dybot/core",
+  "name": "@dybot/audio",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,12 +12,7 @@
     }
   },
   "dependencies": {
-    "@dybot/ai": "workspace:*",
-    "@dybot/audio": "workspace:*",
-    "@dybot/contracts": "workspace:*",
-    "@dybot/douyu": "workspace:*",
-    "@dybot/logging": "workspace:*",
-    "@dybot/voice": "workspace:*"
+    "@dybot/contracts": "workspace:*"
   },
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",

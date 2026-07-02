@@ -29,6 +29,13 @@ export function getBotEventMetadata(input: BotEvent): BotEventMetadata {
     case "ai.reply.generated":
     case "ai.reply.failed":
     case "ai.reply.skipped":
+    case "voice.synthesis.generated":
+    case "voice.synthesis.failed":
+    case "voice.synthesis.skipped":
+    case "audio.playback.started":
+    case "audio.playback.finished":
+    case "audio.playback.failed":
+    case "audio.playback.skipped":
       return {
         stableId: event.payload.eventId,
         sourceEventId: event.payload.eventId,

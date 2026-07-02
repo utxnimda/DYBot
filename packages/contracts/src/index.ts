@@ -1,3 +1,4 @@
+export * from "./audio";
 export * from "./ai";
 export * from "./config";
 export * from "./douyu";
@@ -8,3 +9,4 @@ export * from "./ids";
 export * from "./ipc";
 export * from "./logging";
 export * from "./storage";
+export * from "./voice";

@@ -3,6 +3,22 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { BotEvent, DouyuRoomCaptureConfig, HealthSnapshot } from "@dybot/contracts";
 import { getBotEventMetadata } from "@dybot/contracts";
 
+type NavTab = "overview" | "danmaku" | "ai" | "voice" | "logs";
+
+interface DetailRow {
+  readonly label: string;
+  readonly value: string | number;
+}
+
+const navItems: ReadonlyArray<{ readonly id: NavTab; readonly label: string }> = [
+  { id: "overview", label: "总览" },
+  { id: "danmaku", label: "弹幕" },
+  { id: "ai", label: "AI" },
+  { id: "voice", label: "语音" },
+  { id: "logs", label: "日志" },
+];
+
+const activeTab = ref<NavTab>("overview");
 const health = ref<HealthSnapshot | null>(null);
 const events = ref<BotEvent[]>([]);
 const actionError = ref("");
@@ -15,6 +31,9 @@ const douyuStatus = ref("idle");
 const danmakuCount = ref(0);
 const giftCount = ref(0);
 const aiReplyCount = ref(0);
+const voiceSynthesisCount = ref(0);
+const audioPlaybackCount = ref(0);
+const audioPlaybackStatus = ref("idle");
 
 const statusLabel = computed(() => health.value?.status ?? "idle");
 const isRunning = computed(
@@ -29,6 +48,89 @@ const douyuConnected = computed(
     douyuStatus.value === "joined_group" ||
     douyuStatus.value === "heartbeat",
 );
+
+const pageTitle = computed(
+  () => navItems.find((item) => item.id === activeTab.value)?.label ?? "总览",
+);
+const visibleEvents = computed(() => {
+  switch (activeTab.value) {
+    case "danmaku":
+      return events.value.filter(isDouyuFeedEvent);
+    case "ai":
+      return events.value.filter(isAiEvent);
+    case "voice":
+      return events.value.filter(isVoiceOrAudioEvent);
+    case "logs":
+    case "overview":
+      return events.value;
+  }
+});
+const eventPanelTitle = computed(() => {
+  switch (activeTab.value) {
+    case "danmaku":
+      return "弹幕事件";
+    case "ai":
+      return "AI 事件";
+    case "voice":
+      return "语音事件";
+    case "logs":
+      return "运行日志";
+    case "overview":
+      return "事件流";
+  }
+});
+const detailPanelTitle = computed(() => {
+  switch (activeTab.value) {
+    case "danmaku":
+      return "斗鱼采集";
+    case "ai":
+      return "AI 状态";
+    case "voice":
+      return "语音状态";
+    case "logs":
+      return "运行状态";
+    case "overview":
+      return "运行控制";
+  }
+});
+const detailRows = computed<readonly DetailRow[]>(() => {
+  switch (activeTab.value) {
+    case "danmaku":
+      return [
+        { label: "房间", value: douyuRoom.value || "--" },
+        { label: "采集", value: douyuStatus.value },
+        { label: "弹幕", value: danmakuCount.value },
+        { label: "礼物", value: giftCount.value },
+      ];
+    case "ai":
+      return [
+        { label: "回复", value: aiReplyCount.value },
+        { label: "跳过", value: countEvents(["ai.reply.skipped"]) },
+        { label: "失败", value: countEvents(["ai.reply.failed"]) },
+        { label: "Runtime", value: statusLabel.value },
+      ];
+    case "voice":
+      return [
+        { label: "TTS", value: voiceSynthesisCount.value },
+        { label: "播放", value: audioPlaybackCount.value },
+        { label: "播放状态", value: audioPlaybackStatus.value },
+        { label: "失败", value: countEvents(["voice.synthesis.failed", "audio.playback.failed"]) },
+      ];
+    case "logs":
+      return [
+        { label: "Runtime", value: statusLabel.value },
+        { label: "事件", value: events.value.length },
+        {
+          label: "更新",
+          value: health.value?.updatedAt
+            ? new Date(health.value.updatedAt).toLocaleTimeString()
+            : "--",
+        },
+      ];
+    case "overview":
+      return [];
+  }
+});
 
 let unsubscribe: (() => void) | undefined;
 
@@ -115,6 +217,32 @@ function onBotEvent(event: BotEvent): void {
     return;
   }
 
+  if (event.type === "voice.synthesis.generated") {
+    voiceSynthesisCount.value += 1;
+    return;
+  }
+
+  if (event.type === "audio.playback.started") {
+    audioPlaybackStatus.value = "playing";
+    return;
+  }
+
+  if (event.type === "audio.playback.finished") {
+    audioPlaybackCount.value += 1;
+    audioPlaybackStatus.value = "done";
+    return;
+  }
+
+  if (event.type === "audio.playback.failed") {
+    audioPlaybackStatus.value = "failed";
+    return;
+  }
+
+  if (event.type === "audio.playback.skipped") {
+    audioPlaybackStatus.value = "skipped";
+    return;
+  }
+
   if (event.type === "douyu.room_status") {
     douyuStatus.value = event.payload.status;
     return;
@@ -157,11 +285,51 @@ function eventSummary(event: BotEvent): string {
       return `AI reply failed: ${event.payload.error.message}`;
     case "ai.reply.skipped":
       return `AI reply skipped: ${event.payload.reason}`;
+    case "voice.synthesis.generated":
+      return `Voice generated: ${event.payload.result.text}`;
+    case "voice.synthesis.failed":
+      return `Voice failed: ${event.payload.error.message}`;
+    case "voice.synthesis.skipped":
+      return `Voice skipped: ${event.payload.reason}`;
+    case "audio.playback.started":
+      return `Audio started: ${event.payload.outputDeviceId}`;
+    case "audio.playback.finished":
+      return `Audio finished: ${event.payload.result.outputDeviceId}`;
+    case "audio.playback.failed":
+      return `Audio failed: ${event.payload.error.message}`;
+    case "audio.playback.skipped":
+      return `Audio skipped: ${event.payload.reason}`;
   }
 }
 
 function eventTime(event: BotEvent): string {
   return new Date(getBotEventMetadata(event).occurredAt).toLocaleTimeString();
+}
+
+function isDouyuFeedEvent(event: BotEvent): boolean {
+  return (
+    event.type === "douyu.danmaku" ||
+    event.type === "douyu.gift" ||
+    event.type === "douyu.user_entered" ||
+    event.type === "douyu.room_status" ||
+    event.type === "douyu.capture_error"
+  );
+}
+
+function isAiEvent(event: BotEvent): boolean {
+  return (
+    event.type === "ai.reply.generated" ||
+    event.type === "ai.reply.failed" ||
+    event.type === "ai.reply.skipped"
+  );
+}
+
+function isVoiceOrAudioEvent(event: BotEvent): boolean {
+  return event.type.startsWith("voice.") || event.type.startsWith("audio.");
+}
+
+function countEvents(types: readonly BotEvent["type"][]): number {
+  return events.value.filter((event) => types.includes(event.type)).length;
 }
 
 onMounted(async () => {
@@ -186,11 +354,16 @@ onBeforeUnmount(() => {
       </div>
 
       <nav class="nav-list" aria-label="主导航">
-        <button class="nav-item active" type="button">总览</button>
-        <button class="nav-item" type="button">弹幕</button>
-        <button class="nav-item" type="button">AI</button>
-        <button class="nav-item" type="button">语音</button>
-        <button class="nav-item" type="button">日志</button>
+        <button
+          v-for="item in navItems"
+          :key="item.id"
+          :class="['nav-item', { active: activeTab === item.id }]"
+          type="button"
+          :aria-current="activeTab === item.id ? 'page' : undefined"
+          @click="activeTab = item.id"
+        >
+          {{ item.label }}
+        </button>
       </nav>
     </aside>
 
@@ -198,7 +371,7 @@ onBeforeUnmount(() => {
       <header class="topbar">
         <div>
           <p class="eyebrow">Runtime</p>
-          <h2>控制台</h2>
+          <h2>{{ pageTitle }}</h2>
         </div>
         <div class="status-pill">
           <span :class="statusClass" />
@@ -228,14 +401,19 @@ onBeforeUnmount(() => {
           <small>Replies</small>
         </article>
         <article class="metric-card">
-          <span class="metric-label">播放队列</span>
-          <strong>0</strong>
-          <small>Audio queue</small>
+          <span class="metric-label">语音</span>
+          <strong>{{ voiceSynthesisCount }}</strong>
+          <small>TTS</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">播放</span>
+          <strong>{{ audioPlaybackCount }}</strong>
+          <small>{{ audioPlaybackStatus }}</small>
         </article>
       </section>
 
       <section class="panel-grid">
-        <article class="panel runtime-panel">
+        <article v-if="activeTab === 'overview'" class="panel runtime-panel">
           <div class="panel-heading">
             <h3>运行控制</h3>
             <span>{{
@@ -263,7 +441,23 @@ onBeforeUnmount(() => {
           <p v-if="actionError" class="error-text">{{ actionError }}</p>
         </article>
 
-        <article class="panel douyu-panel">
+        <article v-else class="panel detail-panel">
+          <div class="panel-heading">
+            <h3>{{ detailPanelTitle }}</h3>
+            <span>{{ visibleEvents.length }}</span>
+          </div>
+          <dl class="detail-grid">
+            <div v-for="row in detailRows" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article
+          v-if="activeTab === 'overview' || activeTab === 'danmaku'"
+          class="panel douyu-panel"
+        >
           <div class="panel-heading">
             <h3>斗鱼采集</h3>
             <span class="inline-status"><span :class="douyuStatusClass" />{{ douyuStatus }}</span>
@@ -293,18 +487,18 @@ onBeforeUnmount(() => {
 
         <article class="panel event-panel">
           <div class="panel-heading">
-            <h3>事件流</h3>
-            <span>{{ events.length }}</span>
+            <h3>{{ eventPanelTitle }}</h3>
+            <span>{{ visibleEvents.length }}</span>
           </div>
           <ol class="event-list">
-            <li v-for="event in events" :key="eventKey(event)">
+            <li v-for="event in visibleEvents" :key="eventKey(event)">
               <div>
                 <span>{{ event.type }}</span>
                 <p>{{ eventSummary(event) }}</p>
               </div>
               <code>{{ eventTime(event) }}</code>
             </li>
-            <li v-if="events.length === 0" class="empty-row">暂无事件</li>
+            <li v-if="visibleEvents.length === 0" class="empty-row">暂无事件</li>
           </ol>
         </article>
       </section>

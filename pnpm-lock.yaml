@@ -10,6 +10,9 @@ importers:
       "@dybot/ai":
         specifier: workspace:*
         version: link:packages/ai
+      "@dybot/audio":
+        specifier: workspace:*
+        version: link:packages/audio
       "@dybot/contracts":
         specifier: workspace:*
         version: link:packages/contracts
@@ -22,6 +25,9 @@ importers:
       "@dybot/storage":
         specifier: workspace:*
         version: link:packages/storage
+      "@dybot/voice":
+        specifier: workspace:*
+        version: link:packages/voice
       "@eslint/js":
         specifier: ^9.17.0
         version: 9.39.4
@@ -76,12 +82,15 @@ importers:
 
   apps/desktop:
     dependencies:
-      "@dybot/app-config":
-        specifier: workspace:*
-        version: link:../../packages/app-config
       "@dybot/ai":
         specifier: workspace:*
         version: link:../../packages/ai
+      "@dybot/app-config":
+        specifier: workspace:*
+        version: link:../../packages/app-config
+      "@dybot/audio":
+        specifier: workspace:*
+        version: link:../../packages/audio
       "@dybot/contracts":
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -97,6 +106,9 @@ importers:
       "@dybot/storage":
         specifier: workspace:*
         version: link:../../packages/storage
+      "@dybot/voice":
+        specifier: workspace:*
+        version: link:../../packages/voice
       sqlite3:
         specifier: ^6.0.1
         version: 6.0.1
@@ -116,6 +128,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/audio:
+    dependencies:
+      "@dybot/contracts":
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/contracts:
     dependencies:
       zod:
@@ -127,6 +145,9 @@ importers:
       "@dybot/ai":
         specifier: workspace:*
         version: link:../ai
+      "@dybot/audio":
+        specifier: workspace:*
+        version: link:../audio
       "@dybot/contracts":
         specifier: workspace:*
         version: link:../contracts
@@ -136,6 +157,9 @@ importers:
       "@dybot/logging":
         specifier: workspace:*
         version: link:../logging
+      "@dybot/voice":
+        specifier: workspace:*
+        version: link:../voice
 
   packages/douyu:
     dependencies:
@@ -163,6 +187,12 @@ importers:
       sqlite3:
         specifier: ^6.0.1
         version: 6.0.1
+
+  packages/voice:
+    dependencies:
+      "@dybot/contracts":
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
   7zip-bin@5.2.0:

@@ -4,11 +4,14 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 const workspacePackages = [
   "@dybot/app-config",
+  "@dybot/ai",
+  "@dybot/audio",
   "@dybot/contracts",
   "@dybot/core",
   "@dybot/douyu",
   "@dybot/logging",
   "@dybot/storage",
+  "@dybot/voice",
 ];
 
 const nativeRuntimeDependencies = ["sqlite3"];

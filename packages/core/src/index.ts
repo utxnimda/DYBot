@@ -3,3 +3,7 @@ export * from "./orchestrator/runtime-orchestrator";
 export * from "./pipeline/ai-reply-pipeline";
 export * from "./task-state/ai-reply-task-factory";
 export * from "./trigger-policy/ai-reply-trigger-policy";
+export * from "./pipeline/voice-synthesis-pipeline";
+export * from "./task-state/voice-synthesis-task-factory";
+export * from "./pipeline/audio-playback-pipeline";
+export * from "./task-state/audio-playback-task-factory";

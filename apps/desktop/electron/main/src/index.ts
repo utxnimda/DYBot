@@ -3,11 +3,13 @@ import { dirname, join } from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { getDefaultAppConfig, resolveDefaultStorageDatabasePath } from "@dybot/app-config";
 import { MockAiProvider } from "@dybot/ai";
+import { MockAudioPlayer } from "@dybot/audio";
 import { DouyuRoomCaptureConfigSchema, IpcChannel, type BotEvent } from "@dybot/contracts";
 import { createRuntimeOrchestrator, type RuntimeOrchestratorOptions } from "@dybot/core";
 import { DouyuTcpCaptureClient } from "@dybot/douyu";
 import { createLogger } from "@dybot/logging";
 import { createStorageService, type StorageService } from "@dybot/storage";
+import { MockVoiceProvider } from "@dybot/voice";
 
 const logger = createLogger({ module: "desktop-main" });
 const appConfig = getDefaultAppConfig();
@@ -18,6 +20,12 @@ const runtimeOptions: RuntimeOrchestratorOptions = {
 };
 if (appConfig.features.aiReply) {
   runtimeOptions.aiProvider = new MockAiProvider();
+  if (appConfig.features.voiceSynthesis) {
+    runtimeOptions.voiceProvider = new MockVoiceProvider();
+    if (appConfig.features.audioPlayback) {
+      runtimeOptions.audioPlayer = new MockAudioPlayer();
+    }
+  }
 }
 const runtime = createRuntimeOrchestrator(runtimeOptions);
 

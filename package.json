@@ -23,10 +23,12 @@
   },
   "devDependencies": {
     "@dybot/ai": "workspace:*",
+    "@dybot/audio": "workspace:*",
     "@dybot/contracts": "workspace:*",
     "@dybot/core": "workspace:*",
     "@dybot/douyu": "workspace:*",
     "@dybot/storage": "workspace:*",
+    "@dybot/voice": "workspace:*",
     "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.51.0",
     "@types/node": "^24.0.0",

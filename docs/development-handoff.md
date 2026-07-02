@@ -7,7 +7,7 @@
 - Remote: `https://github.com/utxnimda/DYBot.git`
 - Branch: `main`
 - 最近已知远端基线提交: `bd14059 docs: add development handoff`；本次提交推送后以 GitHub `main` 最新提交为准
-- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、AI contracts/prompt/mock provider 基础包、AI mock reply pipeline、`pnpm run pack` 打包验收。
+- 最近完成阶段：斗鱼采集 UI 接入、storage 基础包、storage runtime 接入、runtime event -> storage 集成测试、AI contracts/prompt/mock provider 基础包、AI mock reply pipeline、Voice/TTS mock pipeline、Audio playback mock queue、`pnpm run pack` 打包验收。
 - 主线技术栈: TypeScript + Electron + Vue 3 + Vite + pnpm workspace
 - 目标形态: 独立桌面可执行程序，不依赖远程 Web 页面作为主 UI。
 
@@ -124,6 +124,28 @@ pnpm install
 - storage repository 已支持 AI reply events 的 eventId、roomId、occurredAt 提取；集成测试覆盖 AI reply 入库。
 - 根 `package.json` 脚本内部已统一使用 `corepack pnpm`，避免当前 Windows shell 缺少全局 pnpm shim 时失败。
 
+### M2.2: Voice/TTS mock pipeline
+
+- `packages/contracts/src/voice.ts`：voice synthesis request/result/task schema，以及 `voice.synthesis.generated`、`voice.synthesis.failed`、`voice.synthesis.skipped` typed event contract。
+- `packages/contracts/src/ids.ts` 新增 `AudioAssetId` 和 `createAudioAssetId()`，用于 TTS 结果产生可追踪音频资产元数据。
+- `packages/contracts/src/event-metadata.ts` 支持 voice events 的 eventId、roomId、occurredAt 提取，storage 和 renderer 继续共用同一套 metadata 逻辑。
+- 新增 `packages/voice`：TTS provider interface、`MockVoiceProvider`、`cleanTextForSpeech()` 和包内单元测试；当前不接真实 TTS key，不生成真实音频文件。
+- `packages/core` 新增 `VoiceSynthesisPipeline` 和 `VoiceSynthesisTaskFactory`，runtime 在 `ai.reply.generated` 后自动触发 mock TTS，并保留同一 `traceId`。
+- Voice pipeline 支持 max concurrency、queue length、stop cancellation、provider failure 和 skipped reason。
+- Electron main 只在 `features.aiReply` 与 `features.voiceSynthesis` 同时为 true 时注入 `MockVoiceProvider`；renderer 可展示 voice events 并统计 TTS 生成数。
+- storage integration 已覆盖 AI -> voice generated event 的持久化和 room/event type 查询。
+- 补齐 `packages/ai/src/token/estimate.ts`，恢复 AI mock provider 和 core typecheck 所需的 token 估算导出。
+
+### M2.3: Audio playback mock queue
+
+- `packages/contracts/src/audio.ts`：audio playback request/result/task schema，以及 `audio.playback.started`、`audio.playback.finished`、`audio.playback.failed`、`audio.playback.skipped` typed event contract。
+- 新增 `packages/audio`：`AudioPlayer` interface、`MockAudioPlayer`、mock output devices 和包内单元测试；当前不枚举真实设备、不播放真实音频。
+- `packages/contracts/src/event-metadata.ts` 支持 audio events 的 eventId、roomId、occurredAt 提取，storage 和 renderer 继续共用同一套 metadata 逻辑。
+- `packages/core` 新增 `AudioPlaybackPipeline` 和 `AudioPlaybackTaskFactory`，runtime 在 `voice.synthesis.generated` 后自动创建播放任务，并保留同一 `traceId`。
+- Audio pipeline 支持 max concurrency、queue length、stop cancellation、player failure 和 skipped reason。
+- Electron main 只在 `features.aiReply`、`features.voiceSynthesis`、`features.audioPlayback` 同时为 true 时注入 `MockAudioPlayer`；renderer 可展示 audio playback events 并统计播放完成数。
+- storage integration 已覆盖 AI -> voice -> audio playback finished event 的持久化和 room/event type 查询。
+
 ## 配置默认值
 
 - 默认斗鱼测试房间号: `9999`
@@ -133,37 +155,29 @@ pnpm install
 
 ## 最近验证状态
 
-最近已通过：
+最近已通过（本轮 audio mock queue 后重新跑过）：
 
 ```powershell
-pnpm --filter @dybot/storage typecheck
-pnpm --filter @dybot/storage test
-pnpm --filter @dybot/ai typecheck
-pnpm --filter @dybot/ai test
-pnpm --filter @dybot/contracts typecheck
-pnpm --filter @dybot/core typecheck
-pnpm --filter @dybot/core test
-pnpm --filter @dybot/desktop typecheck
-pnpm --filter @dybot/desktop build
+corepack pnpm --filter @dybot/audio typecheck
+corepack pnpm --filter @dybot/audio test
+corepack pnpm --filter @dybot/contracts typecheck
+corepack pnpm --filter @dybot/core typecheck
+corepack pnpm --filter @dybot/desktop typecheck
+node node_modules\vitest\vitest.mjs run packages\core\tests\runtime-orchestrator.test.ts
+node node_modules\vitest\vitest.mjs run tests\integration\storage-runtime-event.test.ts
 corepack pnpm -r typecheck
+corepack pnpm lint
 corepack pnpm test
 corepack pnpm build
-corepack pnpm -r build
 corepack pnpm smoke
-node node_modules\eslint\bin\eslint.js . --max-warnings=0
-node node_modules\prettier\bin\prettier.cjs --check <本次改动文件>
-pnpm exec vitest run tests/integration/storage-runtime-event.test.ts
-node node_modules\vitest\vitest.mjs run tests\integration\storage-runtime-event.test.ts
-node node_modules\vitest\vitest.mjs run packages\core\tests\runtime-orchestrator.test.ts
-pnpm run pack
-pnpm dev
+corepack pnpm exec prettier --check <本次 audio 改动文件>
 ```
 
 说明：
 
 - 自动化测试使用 fixture/mock，不连接真实 AI/TTS key。
 - 本轮已修复根脚本内部裸 `pnpm` 调用；当前 Windows shell 可直接使用 `corepack pnpm build`。
-- 全仓库 `prettier --check .` 仍会命中历史格式差异；本轮已格式化并校验本次改动文件，未做全仓库格式化 churn。
+- 全仓库 `prettier --check .` 仍会命中历史格式差异；本轮失败文件为既有 AI/core/storage 等 18 个文件。本轮已格式化并校验本次 audio 改动文件，未做全仓库格式化 churn。
 - `pnpm dev` 已启动到 `storage.ready` 和 `desktop.ready`，验证 Electron main 可以初始化 SQLite storage；验证后已手动结束 dev 进程。
 - dev 过程中出现过 Chromium SSL handshake 背景日志，不影响本地应用 ready。
 - 真实斗鱼房间 `9999` 包级网络验收已通过：`DouyuTcpCaptureClient` 连接成功，收到 `connected`、`joined_group`、`login_ok`、`heartbeat`、`danmaku`、`gift`、`user_entered`、`disconnected` 事件；30 秒窗口内计数为 room_status 9、danmaku 97、gift 39、user_entered 155。
@@ -181,32 +195,31 @@ M1 剩余风险和补充项：
 AI/TTS/音频链路剩余：
 
 - AI runtime pipeline 当前仍只接 `MockAiProvider`，默认配置下 `features.aiReply=false` 不会启用；尚未做真实 provider 配置、模型列表、规则 UI 和 reply_tasks 专表。
-- `packages/voice` 尚未创建。
-- `packages/audio` 尚未创建。
+- Voice/TTS runtime pipeline 当前仍只接 `MockVoiceProvider`，默认配置下 `features.voiceSynthesis=false` 不会启用；尚未做真实 TTS provider、音色配置、音频缓存和语音库。
+- Audio playback runtime pipeline 当前仍只接 `MockAudioPlayer`，默认配置下 `features.audioPlayback=false` 不会启用；尚未做真实设备枚举、用户选择输出设备、音量、暂停/跳过/打断和真实音频播放。
 - `packages/ui-kit` 尚未创建。
 
 ## 推荐下一步
 
-### 下一步 1: Voice/TTS mock pipeline
+### 下一步 1: AI/voice/audio config profile hardening
 
-目标：从 `ai.reply.generated` 进入 mock TTS，生成可进入播放队列的语音任务。
-
-建议先做 mock pipeline，不接真实 key：
-
-- 创建 `packages/voice`：TTS provider interface、mock provider、文本清洗入口、token/耗时占位统计。
-- 在 `packages/contracts` 定义 voice task / `voice.synthesis.generated` / `voice.synthesis.failed` 事件。
-- runtime 监听 `ai.reply.generated` 后调用 mock TTS provider，继续保留同一 `traceId`。
-- 更新 storage integration，确认 AI -> voice 结果可入库。
-
-### 下一步 2: AI config/profile hardening
-
-目标：把 AI mock pipeline 从代码默认项推进到可配置的直播间 profile。
+目标：把 AI、voice 和 audio mock pipeline 从代码默认项推进到可配置的直播间 profile。
 
 建议先做：
 
-- 在 app-config profile 中表达 AI 开关、关键词、用户冷却、全局冷却、队列长度和并发。
-- UI 提供 AI mock pipeline 的启停、规则展示和 skipped reason 过滤。
-- 后续再接真实 provider profile，不把真实 API key 或 provider base URL 放进仓库。
+- 在 app-config profile 中表达 AI/voice/audio 开关、关键词、冷却、队列长度、并发、voiceId、输出格式和 outputDeviceId。
+- UI 提供 AI/voice/audio mock pipeline 的启停、规则展示、队列状态和 skipped reason 过滤。
+- 后续再接真实 provider profile，不把真实 API key、TTS key、provider base URL 或用户设备配置放进仓库。
+
+### 下一步 2: Real provider/device integration
+
+目标：在 mock 链路稳定后逐步接真实 AI、TTS 和音频设备能力。
+
+建议先做：
+
+- 真实 AI provider 前先完成 token budget、上下文窗口、限流和 prompt 审计日志脱敏。
+- 真实 TTS provider 前先完成 voice profile、缓存目录、音频资产生命周期和错误恢复策略。
+- 真实音频播放前先完成设备枚举、测试音、输出设备选择、音量和播放队列控制。
 
 ### 下一步 3: Storage 打包回归持续化
 
@@ -230,6 +243,8 @@ AI/TTS/音频链路剩余：
 - contract 包: `packages/contracts`
 - runtime core: `packages/core`
 - AI 包: `packages/ai`
+- Voice 包: `packages/voice`
+- Audio 包: `packages/audio`
 - 斗鱼包: `packages/douyu`
 - 默认配置包: `packages/app-config`
 - 日志包: `packages/logging`

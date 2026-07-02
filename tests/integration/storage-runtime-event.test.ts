@@ -2,11 +2,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MockAiProvider } from "@dybot/ai";
+import { MockAudioPlayer } from "@dybot/audio";
+import { MockVoiceProvider } from "@dybot/voice";
 import {
   DouyuRoomCaptureConfigSchema,
   type AiEvent,
+  type AudioEvent,
   type BotEvent,
   type DouyuEvent,
+  type VoiceEvent,
 } from "@dybot/contracts";
 import { createRuntimeOrchestrator } from "@dybot/core";
 import {
@@ -196,6 +200,96 @@ describe("runtime event storage integration", () => {
       expect(aiEvent.payload.result.promptSummary.messageCount).toBe(2);
       expect("prompt" in aiEvent.payload.result).toBe(false);
       expect(aiEvent.payload.task.triggerType).toBe("douyu.danmaku");
+    } finally {
+      unsubscribe();
+      await service.close();
+    }
+  });
+  it("persists voice synthesis events generated from AI replies", async () => {
+    const service = await createStorageService({ filePath: createTempDatabasePath() });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient(createDouyuReplayEvents()),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new MockVoiceProvider(),
+      now: () => 35_000,
+    });
+    const persistedEvents: Array<Promise<void>> = [];
+    const unsubscribe = runtime.onEvent((event) => {
+      persistedEvents.push(persistEvent(service, event));
+    });
+    const voiceEventPromise = waitForRuntimeEvent<
+      Extract<VoiceEvent, { type: "voice.synthesis.generated" }>
+    >(
+      runtime,
+      (event): event is Extract<VoiceEvent, { type: "voice.synthesis.generated" }> =>
+        event.type === "voice.synthesis.generated",
+    );
+
+    try {
+      await runtime.startDouyuCapture(
+        DouyuRoomCaptureConfigSchema.parse({ roomId: douyuReplayRoomId }),
+      );
+      const voiceEvent = await voiceEventPromise;
+      await Promise.all(persistedEvents);
+
+      const records = await service.events.list({
+        roomId: douyuReplayRoomId,
+        eventTypes: ["voice.synthesis.generated"],
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records.at(0)?.eventId).toBe(voiceEvent.payload.eventId);
+      expect(records.at(0)?.roomId).toBe(douyuReplayRoomId);
+      expect(records.at(0)?.traceId).toBe(voiceEvent.traceId);
+      expect(records.at(0)?.event.type).toBe("voice.synthesis.generated");
+      expect(voiceEvent.payload.task.sourceType).toBe("ai.reply.generated");
+      expect(voiceEvent.payload.result.audio.source).toBe("mock");
+    } finally {
+      unsubscribe();
+      await service.close();
+    }
+  });
+
+  it("persists audio playback events generated from voice synthesis", async () => {
+    const service = await createStorageService({ filePath: createTempDatabasePath() });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient(createDouyuReplayEvents()),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new MockVoiceProvider(),
+      audioPlayer: new MockAudioPlayer(),
+      now: () => 40_000,
+    });
+    const persistedEvents: Array<Promise<void>> = [];
+    const unsubscribe = runtime.onEvent((event) => {
+      persistedEvents.push(persistEvent(service, event));
+    });
+    const audioEventPromise = waitForRuntimeEvent<
+      Extract<AudioEvent, { type: "audio.playback.finished" }>
+    >(
+      runtime,
+      (event): event is Extract<AudioEvent, { type: "audio.playback.finished" }> =>
+        event.type === "audio.playback.finished",
+    );
+
+    try {
+      await runtime.startDouyuCapture(
+        DouyuRoomCaptureConfigSchema.parse({ roomId: douyuReplayRoomId }),
+      );
+      const audioEvent = await audioEventPromise;
+      await Promise.all(persistedEvents);
+
+      const records = await service.events.list({
+        roomId: douyuReplayRoomId,
+        eventTypes: ["audio.playback.finished"],
+      });
+
+      expect(records).toHaveLength(1);
+      expect(records.at(0)?.eventId).toBe(audioEvent.payload.eventId);
+      expect(records.at(0)?.roomId).toBe(douyuReplayRoomId);
+      expect(records.at(0)?.traceId).toBe(audioEvent.traceId);
+      expect(records.at(0)?.event.type).toBe("audio.playback.finished");
+      expect(audioEvent.payload.task.sourceType).toBe("voice.synthesis.generated");
+      expect(audioEvent.payload.result.playerId).toBe("mock-audio");
     } finally {
       unsubscribe();
       await service.close();

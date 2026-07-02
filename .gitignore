@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 .pnpm-store/
 
@@ -28,7 +28,7 @@ logs/
 *.key
 *.p12
 *.pfx
-token/
+/token/
 secrets/
 
 # Electron / packaging

@@ -1,4 +1,6 @@
 import { MockAiProvider, type AiProvider, type AiProviderRequestOptions } from "@dybot/ai";
+import { MockAudioPlayer, type AudioPlayer } from "@dybot/audio";
+import { MockVoiceProvider, type VoiceProvider } from "@dybot/voice";
 import {
   DouyuDanmakuEventSchema,
   DouyuRoomCaptureConfigSchema,
@@ -7,8 +9,12 @@ import {
   type AiEvent,
   type AiReplyRequest,
   type AiReplyResult,
+  type AudioEvent,
+  type AudioPlaybackResult,
   type BotEvent,
   type DouyuDanmakuEvent,
+  type VoiceEvent,
+  type VoiceSynthesisResult,
   type DouyuEvent,
 } from "@dybot/contracts";
 import {
@@ -108,6 +114,110 @@ describe("RuntimeOrchestrator", () => {
     expect(aiEvent.payload.result.text).toContain("tester");
     expect(aiEvent.payload.result.promptSummary.messageCount).toBe(2);
     expect("prompt" in aiEvent.payload.result).toBe(false);
+  });
+
+  it("generates a voice synthesis event after an AI reply", async () => {
+    const danmaku = createDanmakuEvent({ text: "@bot voice" });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient([danmaku]),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new MockVoiceProvider(),
+      now: () => 15_000,
+    });
+    const voiceEventPromise = waitForEvent<
+      Extract<VoiceEvent, { type: "voice.synthesis.generated" }>
+    >(
+      runtime,
+      (event): event is Extract<VoiceEvent, { type: "voice.synthesis.generated" }> =>
+        event.type === "voice.synthesis.generated",
+    );
+
+    await runtime.startDouyuCapture(DouyuRoomCaptureConfigSchema.parse({ roomId: "123" }));
+    const voiceEvent = await voiceEventPromise;
+
+    expect(voiceEvent.traceId).toBe(danmaku.traceId);
+    expect(voiceEvent.payload.task.roomId).toBe("123");
+    expect(voiceEvent.payload.task.sourceType).toBe("ai.reply.generated");
+    expect(voiceEvent.payload.result.providerId).toBe("mock-tts");
+    expect(voiceEvent.payload.result.audio.source).toBe("mock");
+    expect(voiceEvent.payload.result.text).toContain("tester");
+  });
+
+  it("generates an audio playback event after voice synthesis", async () => {
+    const danmaku = createDanmakuEvent({ text: "@bot audio" });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient([danmaku]),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new MockVoiceProvider(),
+      audioPlayer: new MockAudioPlayer(),
+      now: () => 17_000,
+    });
+    const audioEventPromise = waitForEvent<
+      Extract<AudioEvent, { type: "audio.playback.finished" }>
+    >(
+      runtime,
+      (event): event is Extract<AudioEvent, { type: "audio.playback.finished" }> =>
+        event.type === "audio.playback.finished",
+    );
+
+    await runtime.startDouyuCapture(DouyuRoomCaptureConfigSchema.parse({ roomId: "123" }));
+    const audioEvent = await audioEventPromise;
+
+    expect(audioEvent.traceId).toBe(danmaku.traceId);
+    expect(audioEvent.payload.task.roomId).toBe("123");
+    expect(audioEvent.payload.task.sourceType).toBe("voice.synthesis.generated");
+    expect(audioEvent.payload.result.playerId).toBe("mock-audio");
+    expect(audioEvent.payload.result.outputDeviceId).toBe("mock-default-output");
+    expect(audioEvent.payload.result.audio.source).toBe("mock");
+  });
+
+  it("emits a recoverable audio failure event without blocking the runtime", async () => {
+    const danmaku = createDanmakuEvent({ text: "@bot audio fail" });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient([danmaku]),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new MockVoiceProvider(),
+      audioPlayer: new FailingAudioPlayer(),
+      now: () => 18_000,
+    });
+    const audioEventPromise = waitForEvent<Extract<AudioEvent, { type: "audio.playback.failed" }>>(
+      runtime,
+      (event): event is Extract<AudioEvent, { type: "audio.playback.failed" }> =>
+        event.type === "audio.playback.failed",
+    );
+
+    await runtime.startDouyuCapture(DouyuRoomCaptureConfigSchema.parse({ roomId: "123" }));
+    const audioEvent = await audioEventPromise;
+
+    expect(runtime.getHealth().status).toBe("idle");
+    expect(audioEvent.traceId).toBe(danmaku.traceId);
+    expect(audioEvent.payload.error.code).toBe("AUDIO_DEVICE_UNAVAILABLE");
+    expect(audioEvent.payload.error.recoverable).toBe(true);
+    expect(audioEvent.payload.error.message).toBe("audio offline");
+  });
+
+  it("emits a recoverable voice failure event without blocking the runtime", async () => {
+    const danmaku = createDanmakuEvent({ text: "@bot voice fail" });
+    const runtime = createRuntimeOrchestrator({
+      douyuCapture: new FakeDouyuCaptureClient([danmaku]),
+      aiProvider: new MockAiProvider(),
+      voiceProvider: new FailingVoiceProvider(),
+      now: () => 16_000,
+    });
+    const voiceEventPromise = waitForEvent<Extract<VoiceEvent, { type: "voice.synthesis.failed" }>>(
+      runtime,
+      (event): event is Extract<VoiceEvent, { type: "voice.synthesis.failed" }> =>
+        event.type === "voice.synthesis.failed",
+    );
+
+    await runtime.startDouyuCapture(DouyuRoomCaptureConfigSchema.parse({ roomId: "123" }));
+    const voiceEvent = await voiceEventPromise;
+
+    expect(runtime.getHealth().status).toBe("idle");
+    expect(voiceEvent.traceId).toBe(danmaku.traceId);
+    expect(voiceEvent.payload.error.code).toBe("TTS_PROVIDER_UNAVAILABLE");
+    expect(voiceEvent.payload.error.recoverable).toBe(true);
+    expect(voiceEvent.payload.error.message).toBe("tts offline");
   });
 
   it("emits a recoverable AI failure event without blocking the runtime", async () => {
@@ -240,6 +350,22 @@ describe("RuntimeOrchestrator", () => {
     expect(provider.requests.at(0)?.recentDanmaku).toEqual([]);
   });
 });
+
+class FailingAudioPlayer implements AudioPlayer {
+  readonly playerId = "failing-audio";
+
+  playAudio(): Promise<AudioPlaybackResult> {
+    return Promise.reject(new Error("audio offline"));
+  }
+}
+
+class FailingVoiceProvider implements VoiceProvider {
+  readonly providerId = "failing-tts";
+
+  synthesizeSpeech(): Promise<VoiceSynthesisResult> {
+    return Promise.reject(new Error("tts offline"));
+  }
+}
 
 class FailingAiProvider implements AiProvider {
   readonly providerId = "failing";

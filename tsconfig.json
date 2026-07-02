@@ -5,11 +5,13 @@
   "references": [
     { "path": "./apps/desktop" },
     { "path": "./packages/contracts" },
+    { "path": "./packages/audio" },
     { "path": "./packages/core" },
     { "path": "./packages/douyu" },
     { "path": "./packages/ai" },
     { "path": "./packages/logging" },
     { "path": "./packages/app-config" },
-    { "path": "./packages/storage" }
+    { "path": "./packages/storage" },
+    { "path": "./packages/voice" }
   ]
 }

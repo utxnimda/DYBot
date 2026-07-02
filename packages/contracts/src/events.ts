@@ -1,5 +1,11 @@
 import { z } from "zod";
 import {
+  AudioPlaybackFailedEventSchema,
+  AudioPlaybackFinishedEventSchema,
+  AudioPlaybackSkippedEventSchema,
+  AudioPlaybackStartedEventSchema,
+} from "./audio";
+import {
   AiReplyFailedEventSchema,
   AiReplyGeneratedEventSchema,
   AiReplySkippedEventSchema,
@@ -13,6 +19,11 @@ import {
 } from "./douyu";
 import { BotErrorSchema } from "./errors";
 import { LogEntrySchema } from "./logging";
+import {
+  VoiceSynthesisFailedEventSchema,
+  VoiceSynthesisGeneratedEventSchema,
+  VoiceSynthesisSkippedEventSchema,
+} from "./voice";
 
 export const RuntimeStatusSchema = z.enum([
   "idle",
@@ -57,6 +68,13 @@ export const BotEventSchema = z.discriminatedUnion("type", [
   AiReplyGeneratedEventSchema,
   AiReplyFailedEventSchema,
   AiReplySkippedEventSchema,
+  VoiceSynthesisGeneratedEventSchema,
+  VoiceSynthesisFailedEventSchema,
+  VoiceSynthesisSkippedEventSchema,
+  AudioPlaybackStartedEventSchema,
+  AudioPlaybackFinishedEventSchema,
+  AudioPlaybackFailedEventSchema,
+  AudioPlaybackSkippedEventSchema,
 ]);
 
 export type RuntimeStatusEvent = z.infer<typeof RuntimeStatusEventSchema>;

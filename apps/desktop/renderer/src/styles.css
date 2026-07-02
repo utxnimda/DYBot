@@ -325,3 +325,36 @@ input {
 .empty-row {
   color: #667085;
 }
+
+.detail-grid {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.detail-grid div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 34px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.detail-grid dt,
+.detail-grid dd {
+  margin: 0;
+}
+
+.detail-grid dt {
+  color: #667085;
+  font-size: 13px;
+}
+
+.detail-grid dd {
+  color: #172033;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
